@@ -26,41 +26,41 @@ jobs:
           git config user.name "${{ secrets.GIT_AUTHOR_NAME }}"
           git config user.email "${{ secrets.GIT_AUTHOR_EMAIL }}"
 
-
       # Step 3: Fetch the staged branch
       - name: Fetch staged branch
         run: |
           git fetch origin staged:staged || git fetch origin staged
 
-      # Step 4: Pick one file from staged and release to main
-      env:
-        STAGED_BRANCH: staged
-        RELEASE_BRANCH: main
-        EXERCISES_DIR: js_excercise   # <-- Path inside your repo
-      run: |
-        set -e
-        git fetch origin $STAGED_BRANCH:$STAGED_BRANCH
+      # Step 4: Pick one file from staged and release it to main
+      - name: Release one exercise file
+        env:
+          STAGED_BRANCH: staged
+          RELEASE_BRANCH: main
+          EXERCISES_DIR: js_excercise   # adjust if folder name differs
+        run: |
+          set -e
+          git fetch origin $STAGED_BRANCH:$STAGED_BRANCH
 
-        # List files in exercises/ present in staged but not main
-        files=$(git diff --name-only origin/$RELEASE_BRANCH..origin/$STAGED_BRANCH | grep "^${EXERCISES_DIR}/" || true)
+          # List files present in staged but not in main
+          files=$(git diff --name-only origin/$RELEASE_BRANCH..origin/$STAGED_BRANCH | grep "^${EXERCISES_DIR}/" || true)
 
-        echo "Files available for release:"
-        echo "$files"
+          echo "Files available for release:"
+          echo "$files"
 
-        # Pick one file alphabetically
-        next_file=$(echo "$files" | grep -v '^$' | sort | head -n 1 || true)
+          # Pick one file alphabetically
+          next_file=$(echo "$files" | grep -v '^$' | sort | head -n 1 || true)
 
-        if [ -z "$next_file" ]; then
-          echo "No more files to release. Exiting."
-          exit 0
-        fi
+          if [ -z "$next_file" ]; then
+            echo "No more files to release. Exiting."
+            exit 0
+          fi
 
-        echo "Releasing: $next_file"
+          echo "Releasing: $next_file"
 
-        # Checkout that file from staged
-        git checkout origin/$STAGED_BRANCH -- "$next_file"
+          # Checkout that file from staged
+          git checkout origin/$STAGED_BRANCH -- "$next_file"
 
-        # Commit and push to main
-        git add "$next_file"
-        git commit -m "Daily release: $next_file ($(date -u '+%Y-%m-%d'))"
-        git push origin HEAD:$RELEASE_BRANCH
+          # Commit and push to main
+          git add "$next_file"
+          git commit -m "Daily release: $next_file ($(date -u '+%Y-%m-%d'))"
+          git push origin HEAD:$RELEASE_BRANCH
