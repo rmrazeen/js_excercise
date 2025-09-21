@@ -2,15 +2,8 @@ name: Daily JS Exercise Release
 
 on:
   schedule:
-    # Runs daily at 3:00 AM UTC
     - cron: '0 3 * * *'
-  workflow_dispatch: # Allows manual triggering for testing
-    inputs:
-      force_release:
-        description: 'Force release even if no files found'
-        required: false
-        default: false
-        type: boolean
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -19,9 +12,10 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
+      - name: Checkout main branch
         uses: actions/checkout@v4
         with:
+          ref: main
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -30,107 +24,40 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-      - name: Check branches exist
-        run: |
-          git ls-remote --heads origin staged || (echo "❌ 'staged' branch not found" && exit 1)
-          git ls-remote --heads origin main || (echo "❌ 'main' branch not found" && exit 1)
-          echo "✅ Both branches exist"
-
-      - name: Setup branches
-        run: |
-          git fetch origin staged:staged
-          git fetch origin main:main
-          git checkout main
-
-      - name: Find next file to release
-        id: find_file
-        env:
-          EXERCISES_DIR: "js_excercise"
+      - name: Find and release next file
         run: |
           set -e
           
-          # Get files that exist in staged but not in main
-          files=$(git diff --name-only main..staged -- "${EXERCISES_DIR}/" | head -20 || true)
+          # Fetch staged branch
+          git fetch origin staged
           
-          echo "Files available for release:"
-          echo "$files"
+          # Find files in staged that don't exist in main
+          files=$(git ls-tree -r --name-only origin/staged -- js_excercise/ | while read file; do
+            if [ ! -f "$file" ]; then
+              echo "$file"
+            fi
+          done | sort | head -1)
           
-          # Count total files for progress tracking
-          total_files=$(echo "$files" | grep -v '^$' | wc -l || echo "0")
-          echo "📊 Total files remaining: $total_files"
-          
-          if [ "$total_files" -eq 0 ]; then
-            echo "🎉 All files have been released!"
-            echo "file_found=false" >> $GITHUB_OUTPUT
+          if [ -z "$files" ]; then
+            echo "🎉 All exercises have been released!"
             exit 0
           fi
           
-          # Pick the first file alphabetically
-          next_file=$(echo "$files" | grep -v '^$' | sort | head -n 1)
+          echo "🚀 Releasing: $files"
           
-          if [ -z "$next_file" ]; then
-            echo "❌ No file found to release"
-            echo "file_found=false" >> $GITHUB_OUTPUT
-          else
-            echo "🚀 Next file to release: $next_file"
-            echo "file_found=true" >> $GITHUB_OUTPUT
-            echo "file_path=$next_file" >> $GITHUB_OUTPUT
-            echo "remaining_count=$((total_files - 1))" >> $GITHUB_OUTPUT
-          fi
+          # Create directory if needed
+          mkdir -p "$(dirname "$files")"
+          
+          # Get file content from staged branch
+          git show "origin/staged:$files" > "$files"
+          
+          # Commit and push
+          git add "$files"
+          git commit -m "🎯 Daily Exercise: $(basename "$files")
 
-      - name: Release exercise file
-        if: steps.find_file.outputs.file_found == 'true'
-        run: |
-          set -e
+          Released: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
+          From: staged → main"
           
-          FILE_PATH="${{ steps.find_file.outputs.file_path }}"
-          REMAINING="${{ steps.find_file.outputs.remaining_count }}"
-          
-          echo "📁 Releasing: $FILE_PATH"
-          
-          # Copy the file from staged branch
-          git checkout staged -- "$FILE_PATH"
-          
-          # Verify file was copied
-          if [ ! -f "$FILE_PATH" ]; then
-            echo "❌ Failed to copy file: $FILE_PATH"
-            exit 1
-          fi
-          
-          # Stage and commit
-          git add "$FILE_PATH"
-          
-          # Create descriptive commit message
-          FILENAME=$(basename "$FILE_PATH")
-          COMMIT_MSG="🎯 Daily JS Exercise: $FILENAME
-
-          Released on $(date -u '+%Y-%m-%d %H:%M:%S UTC')
-          📊 Remaining exercises: $REMAINING
-          🔗 From: staged → main"
-          
-          git commit -m "$COMMIT_MSG"
-          
-          echo "✅ Committed: $FILE_PATH"
-
-      - name: Push changes
-        if: steps.find_file.outputs.file_found == 'true'
-        run: |
           git push origin main
-          echo "🎉 Successfully pushed to main branch!"
-
-      - name: Create summary
-        if: always()
-        run: |
-          echo "## 📋 Daily JS Exercise Release Summary" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
           
-          if [ "${{ steps.find_file.outputs.file_found }}" = "true" ]; then
-            echo "✅ **Status:** File released successfully" >> $GITHUB_STEP_SUMMARY
-            echo "📁 **File:** \`${{ steps.find_file.outputs.file_path }}\`" >> $GITHUB_STEP_SUMMARY
-            echo "📊 **Remaining:** ${{ steps.find_file.outputs.remaining_count }} exercises" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "⏭️ **Status:** No files to release (all done!)" >> $GITHUB_STEP_SUMMARY
-          fi
-          
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "🕒 **Execution Time:** $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Successfully released: $files"
