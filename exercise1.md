@@ -7,8 +7,8 @@ function addNumbers(num1, num2) {
   return num1 + num2;
 }
 
-console.log("Sum of 5 and 3:", addNumbers(5, 3)); // Expected: 8
-console.log("Sum of 10 and -2:", addNumbers(10, -2)); // Expected: 8
+console.log("Sum of 5 and 3:", addNumbers(5, 3)); //  Expected: 8
+console.log("Sum of 10 and -2:", addNumbers(10, -2)); //  Expected: 8
 ```
 
 **What to learn**: Function definition, parameters, return statement, basic arithmetic.
